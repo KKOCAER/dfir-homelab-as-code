@@ -1,0 +1,49 @@
+# local.zeek.j2 — Zeek site-local policy
+# Managed by Ansible — do not edit manually
+
+##! Zeek local site policy — {{ lab_domain | default('dfir.lab') }}
+
+@load base/protocols/conn
+@load base/protocols/dns
+@load base/protocols/ftp
+@load base/protocols/http
+@load base/protocols/smtp
+@load base/protocols/ssh
+@load base/protocols/ssl
+@load base/frameworks/software
+@load base/frameworks/notice
+@load base/frameworks/intel
+@load base/frameworks/files
+@load base/frameworks/sumstats
+
+# Detection packages
+@load policy/protocols/conn/vlan-logging
+@load policy/protocols/conn/mac-logging
+@load policy/protocols/dns/detect-external-names
+@load policy/protocols/ftp/detect
+@load policy/protocols/http/detect-sqli
+@load policy/protocols/http/detect-webapps
+@load policy/protocols/smtp/detect-suspicious-orig
+@load policy/protocols/ssh/detect-bruteforcing
+@load policy/protocols/ssl/detect-ssl-heartbleed
+@load policy/protocols/ssl/log-hostcerts-only
+@load policy/frameworks/intel/seen
+@load policy/frameworks/intel/do_notice
+@load policy/integration/collective-intel
+@load policy/frameworks/files/hash-all-files
+@load policy/frameworks/files/detect-MHR
+
+# Log file compression
+redef Log::default_rotation_interval = 1hr;
+redef Log::default_writer = Log::WRITER_ASCII;
+
+# Site-specific settings
+redef Site::local_nets = {
+  {{ lab_network | default('10.10.10.0/24') }}
+};
+
+# Enable JSON output for ELK/Splunk integration
+redef LogAscii::use_json = T;
+
+# Increase connection table size for busy networks
+redef ConnThreshold::bytes_threshold = 1000000;

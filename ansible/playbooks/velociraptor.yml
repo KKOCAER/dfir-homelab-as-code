@@ -1,0 +1,113 @@
+---
+# =============================================================
+#  Playbook: velociraptor.yml
+#  Deploys Velociraptor server + client on forensics node
+# =============================================================
+
+- name: Deploy Velociraptor DFIR Platform
+  hosts: forensics
+  become: true
+  vars:
+    velociraptor_version: "0.7.0"
+    velociraptor_bin: /usr/local/bin/velociraptor
+    velociraptor_config_dir: /etc/velociraptor
+    velociraptor_data_dir: /var/lib/velociraptor
+    velociraptor_log_dir: /var/log/velociraptor
+    velociraptor_gui_port: 8889
+    velociraptor_frontend_port: 8000
+    velociraptor_user: velociraptor
+    velociraptor_download_url: >-
+      https://github.com/Velocidex/velociraptor/releases/download/v{{ velociraptor_version }}/velociraptor-v{{ velociraptor_version }}-linux-amd64
+
+  tasks:
+    # ── User & Directories ────────────────────────────────────
+    - name: Create velociraptor system user
+      ansible.builtin.user:
+        name: "{{ velociraptor_user }}"
+        system: true
+        shell: /bin/false
+        home: "{{ velociraptor_data_dir }}"
+        create_home: true
+
+    - name: Create required directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ velociraptor_user }}"
+        group: "{{ velociraptor_user }}"
+        mode: "0750"
+      loop:
+        - "{{ velociraptor_config_dir }}"
+        - "{{ velociraptor_data_dir }}"
+        - "{{ velociraptor_log_dir }}"
+
+    # ── Binary ────────────────────────────────────────────────
+    - name: Download Velociraptor binary
+      ansible.builtin.get_url:
+        url: "{{ velociraptor_download_url }}"
+        dest: "{{ velociraptor_bin }}"
+        mode: "0755"
+        checksum: "sha256:{{ velociraptor_checksum | default(omit) }}"
+
+    # ── Configuration ─────────────────────────────────────────
+    - name: Generate server config
+      ansible.builtin.command:
+        cmd: >-
+          {{ velociraptor_bin }} config generate
+          --merge '{"Frontend":{"hostname":"{{ ansible_host }}","bind_port":{{ velociraptor_frontend_port }}},"GUI":{"bind_port":{{ velociraptor_gui_port }}}}'
+          > {{ velociraptor_config_dir }}/server.config.yaml
+        creates: "{{ velociraptor_config_dir }}/server.config.yaml"
+
+    - name: Set config file permissions
+      ansible.builtin.file:
+        path: "{{ velociraptor_config_dir }}/server.config.yaml"
+        owner: "{{ velociraptor_user }}"
+        group: "{{ velociraptor_user }}"
+        mode: "0640"
+
+    # ── Admin user ────────────────────────────────────────────
+    - name: Create admin user
+      ansible.builtin.command:
+        cmd: >-
+          {{ velociraptor_bin }}
+          --config {{ velociraptor_config_dir }}/server.config.yaml
+          user add admin --role administrator
+      changed_when: true
+      no_log: true
+
+    # ── Systemd service ───────────────────────────────────────
+    - name: Deploy systemd unit
+      ansible.builtin.template:
+        src: ../roles/forensics/templates/velociraptor.service.j2
+        dest: /etc/systemd/system/velociraptor.service
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart Velociraptor
+
+    - name: Enable and start Velociraptor
+      ansible.builtin.systemd:
+        name: velociraptor
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait for GUI to be available
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ velociraptor_gui_port }}"
+        timeout: 60
+
+    - name: Show access URL
+      ansible.builtin.debug:
+        msg: "Velociraptor GUI → https://{{ ansible_host }}:{{ velociraptor_gui_port }}"
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart Velociraptor
+      ansible.builtin.systemd:
+        name: velociraptor
+        state: restarted

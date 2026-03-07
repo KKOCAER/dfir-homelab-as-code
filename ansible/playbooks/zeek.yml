@@ -1,0 +1,103 @@
+---
+# =============================================================
+#  Playbook: zeek.yml
+#  Installs and configures Zeek NSM on the sensor node
+# =============================================================
+
+- name: Deploy Zeek NSM
+  hosts: sensor
+  become: true
+  vars:
+    zeek_version: "6.0.4"
+    zeek_prefix: /opt/zeek
+    zeek_log_dir: /opt/zeek/logs
+    zeek_scripts_dir: /opt/zeek/share/zeek/site
+
+  tasks:
+    # ── Dependencies ─────────────────────────────────────────
+    - name: Install build dependencies
+      ansible.builtin.apt:
+        name:
+          - cmake
+          - make
+          - gcc
+          - g++
+          - flex
+          - bison
+          - libpcap-dev
+          - libssl-dev
+          - python3-dev
+          - swig
+          - zlib1g-dev
+          - libmaxminddb-dev
+        state: present
+        update_cache: true
+
+    # ── Install via package manager (Ubuntu) ──────────────────
+    - name: Add Zeek APT repo key
+      ansible.builtin.apt_key:
+        url: https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key
+        state: present
+
+    - name: Add Zeek APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /"
+        state: present
+        filename: zeek
+
+    - name: Install Zeek
+      ansible.builtin.apt:
+        name: zeek-{{ zeek_version }}
+        state: present
+        update_cache: true
+
+    # ── PATH configuration ────────────────────────────────────
+    - name: Add Zeek to system PATH
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^PATH='
+        line: 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{ zeek_prefix }}/bin"'
+
+    # ── Configuration ─────────────────────────────────────────
+    - name: Deploy node.cfg
+      ansible.builtin.template:
+        src: ../roles/sensor/templates/zeek-node.cfg.j2
+        dest: "{{ zeek_prefix }}/etc/node.cfg"
+        mode: "0644"
+      notify: Deploy Zeek
+
+    - name: Deploy local.zeek (site policy)
+      ansible.builtin.template:
+        src: ../roles/sensor/templates/local.zeek.j2
+        dest: "{{ zeek_scripts_dir }}/local.zeek"
+        mode: "0644"
+      notify: Deploy Zeek
+
+    # ── Start Zeek ────────────────────────────────────────────
+    - name: Deploy and start Zeek
+      ansible.builtin.command:
+        cmd: "{{ zeek_prefix }}/bin/zeekctl deploy"
+      changed_when: true
+
+    - name: Verify Zeek status
+      ansible.builtin.command:
+        cmd: "{{ zeek_prefix }}/bin/zeekctl status"
+      register: zeek_status
+      changed_when: false
+
+    - name: Show Zeek status
+      ansible.builtin.debug:
+        msg: "{{ zeek_status.stdout_lines }}"
+
+    # ── Cron: keep Zeek running ───────────────────────────────
+    - name: Install Zeek cron watchdog
+      ansible.builtin.cron:
+        name: "zeekctl cron"
+        minute: "*/5"
+        job: "{{ zeek_prefix }}/bin/zeekctl cron"
+
+  handlers:
+    - name: Deploy Zeek
+      ansible.builtin.command:
+        cmd: "{{ zeek_prefix }}/bin/zeekctl deploy"
+      changed_when: true

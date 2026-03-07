@@ -1,0 +1,67 @@
+---
+# roles/attacker/tasks/main.yml
+# Configures Kali Linux attacker node with red team tooling
+
+- name: Update Kali package list
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install core offensive tools
+  ansible.builtin.apt:
+    name:
+      - metasploit-framework
+      - nmap
+      - netcat-traditional
+      - impacket-scripts
+      - crackmapexec
+      - evil-winrm
+      - bloodhound
+      - neo4j
+      - responder
+      - john
+      - hashcat
+      - hydra
+      - seclists
+    state: present
+
+- name: Install Python attacker utilities
+  ansible.builtin.pip:
+    name:
+      - requests
+      - pwntools
+      - scapy
+    state: present
+
+- name: Clone Atomic Red Team
+  ansible.builtin.git:
+    repo: https://github.com/redcanaryco/atomic-red-team.git
+    dest: /opt/atomic-red-team
+    depth: 1
+
+- name: Clone PowerSploit
+  ansible.builtin.git:
+    repo: https://github.com/PowerShellMafia/PowerSploit.git
+    dest: /opt/PowerSploit
+    depth: 1
+
+- name: Clone Mimikatz (pre-compiled)
+  ansible.builtin.git:
+    repo: https://github.com/gentilkiwi/mimikatz.git
+    dest: /opt/mimikatz
+    depth: 1
+
+- name: Create attack workspace
+  ansible.builtin.file:
+    path: /root/lab-attacks
+    state: directory
+    mode: "0700"
+
+- name: Copy lab attack scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /root/lab-attacks/
+    mode: "0700"
+  with_fileglob:
+    - files/*.sh
+    - files/*.py

@@ -1,0 +1,14 @@
+---
+# roles/forensics/tasks/main.yml
+
+- name: Import Velociraptor setup
+  ansible.builtin.import_tasks: velociraptor.yml
+  tags: [velociraptor]
+
+- name: Import memory forensics tools
+  ansible.builtin.import_tasks: memory_forensics.yml
+  tags: [memory, volatility]
+
+- name: Import disk forensics tools
+  ansible.builtin.import_tasks: disk_forensics.yml
+  tags: [disk, autopsy]

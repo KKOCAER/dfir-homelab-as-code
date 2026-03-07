@@ -1,0 +1,18 @@
+---
+# roles/sensor/tasks/main.yml
+# Entry point for the sensor role (Suricata + Zeek)
+
+- name: Import Suricata tasks
+  ansible.builtin.import_tasks: suricata.yml
+  tags: [suricata]
+
+- name: Import Zeek tasks
+  ansible.builtin.import_tasks: zeek.yml
+  tags: [zeek]
+
+- name: Configure log rotation
+  ansible.builtin.template:
+    src: logrotate-sensor.j2
+    dest: /etc/logrotate.d/sensor
+    mode: "0644"
+  tags: [logging]

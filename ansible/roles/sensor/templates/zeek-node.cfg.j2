@@ -1,0 +1,21 @@
+# zeek-node.cfg.j2 — Zeek cluster node configuration
+# Managed by Ansible — do not edit manually
+
+[logger]
+type=logger
+host=localhost
+
+[manager]
+type=manager
+host=localhost
+
+[proxy-1]
+type=proxy
+host=localhost
+
+[worker-1]
+type=worker
+host=localhost
+interface={{ zeek_iface | default('eth1') }}
+lb_method=pf_ring
+lb_procs=2

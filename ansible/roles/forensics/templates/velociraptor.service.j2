@@ -1,0 +1,22 @@
+[Unit]
+Description=Velociraptor DFIR Platform
+Documentation=https://docs.velociraptor.app/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ velociraptor_user }}
+Group={{ velociraptor_user }}
+ExecStart={{ velociraptor_bin }} \
+  --config {{ velociraptor_config_dir }}/server.config.yaml \
+  frontend -v
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=velociraptor
+
+[Install]
+WantedBy=multi-user.target

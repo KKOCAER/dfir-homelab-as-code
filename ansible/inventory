@@ -1,0 +1,41 @@
+# =============================================================
+#  DFIR Lab — Ansible Inventory
+# =============================================================
+
+[attacker]
+attacker ansible_host=10.10.10.10 ansible_user=vagrant ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
+
+[sensor]
+sensor ansible_host=10.10.10.20 ansible_user=vagrant ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
+
+[forensics]
+forensics ansible_host=10.10.10.30 ansible_user=vagrant ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
+
+# ── Groups ─────────────────────────────────────────────────────
+
+[blue_team:children]
+sensor
+forensics
+
+[all_nodes:children]
+attacker
+sensor
+forensics
+
+# ── Group variables ─────────────────────────────────────────────
+
+[all_nodes:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+lab_domain=dfir.lab
+lab_network=10.10.10.0/24
+ntp_server=pool.ntp.org
+
+[sensor:vars]
+suricata_iface=eth1
+zeek_iface=eth1
+suricata_home_net="[10.10.10.0/24]"
+
+[forensics:vars]
+velociraptor_port=8889
+velociraptor_gui_port=8000
