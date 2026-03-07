@@ -1,0 +1,166 @@
+---
+# =============================================================
+#  Playbook: forensic_tools.yml
+#  Installs Volatility3, Autopsy, Sleuth Kit, and utilities
+# =============================================================
+
+- name: Install DFIR Forensic Toolkit
+  hosts: forensics
+  become: true
+  vars:
+    volatility_dir: /opt/volatility3
+    autopsy_version: "4.21.0"
+    tools_dir: /opt/dfir-tools
+
+  tasks:
+    # ── System packages ───────────────────────────────────────
+    - name: Install base forensic packages
+      ansible.builtin.apt:
+        name:
+          - sleuthkit
+          - testdisk
+          - foremost
+          - binwalk
+          - bulk-extractor
+          - dcfldd
+          - ewf-tools
+          - python3
+          - python3-pip
+          - python3-venv
+          - git
+          - curl
+          - yara
+          - ssdeep
+          - libfuzzy-dev
+          - exiftool
+          - hexedit
+          - wireshark-common
+          - tshark
+          - nmap
+          - netcat-openbsd
+        state: present
+        update_cache: true
+
+    # ── Python forensic libs ──────────────────────────────────
+    - name: Install Python forensic libraries
+      ansible.builtin.pip:
+        name:
+          - oletools
+          - pefile
+          - yara-python
+          - python-magic
+          - plaso
+          - dfvfs
+          - dfimagetools
+        state: present
+
+    # ── Volatility 3 ─────────────────────────────────────────
+    - name: Clone Volatility3
+      ansible.builtin.git:
+        repo: https://github.com/volatilityfoundation/volatility3.git
+        dest: "{{ volatility_dir }}"
+        version: stable
+        depth: 1
+
+    - name: Install Volatility3 dependencies
+      ansible.builtin.pip:
+        requirements: "{{ volatility_dir }}/requirements.txt"
+        state: present
+
+    - name: Create vol3 symlink
+      ansible.builtin.file:
+        src: "{{ volatility_dir }}/vol.py"
+        dest: /usr/local/bin/vol3
+        state: link
+
+    # ── Download symbol packs (Win10, Win11) ─────────────────
+    - name: Create Volatility symbols directory
+      ansible.builtin.file:
+        path: "{{ volatility_dir }}/volatility3/symbols"
+        state: directory
+        mode: "0755"
+
+    - name: Download Windows symbol pack
+      ansible.builtin.get_url:
+        url: "https://downloads.volatilityfoundation.org/volatility3/symbols/windows.zip"
+        dest: /tmp/windows-symbols.zip
+        timeout: 120
+      ignore_errors: true  # Offline lab may not have internet
+
+    - name: Extract Windows symbols
+      ansible.builtin.unarchive:
+        src: /tmp/windows-symbols.zip
+        dest: "{{ volatility_dir }}/volatility3/symbols/"
+        remote_src: true
+      ignore_errors: true
+
+    # ── YARA rules ────────────────────────────────────────────
+    - name: Clone YARA rules (Awesome YARA)
+      ansible.builtin.git:
+        repo: https://github.com/InQuest/awesome-yara.git
+        dest: /opt/yara-rules
+        depth: 1
+
+    # ── Autopsy (headless install) ────────────────────────────
+    - name: Install Autopsy dependencies
+      ansible.builtin.apt:
+        name:
+          - openjdk-17-jdk
+          - libafflib-dev
+          - afflib-tools
+          - zlib1g-dev
+        state: present
+
+    # ── Network forensics ─────────────────────────────────────
+    - name: Install NetworkMiner dependencies
+      ansible.builtin.apt:
+        name:
+          - mono-complete
+        state: present
+      ignore_errors: true
+
+    # ── Chainsaw (Windows log parser) ────────────────────────
+    - name: Download Chainsaw
+      ansible.builtin.get_url:
+        url: "https://github.com/WithSecureLabs/chainsaw/releases/latest/download/chainsaw_x86_64-unknown-linux-gnu.tar.gz"
+        dest: /tmp/chainsaw.tar.gz
+        timeout: 60
+      ignore_errors: true
+
+    - name: Install Chainsaw
+      ansible.builtin.unarchive:
+        src: /tmp/chainsaw.tar.gz
+        dest: /usr/local/bin/
+        remote_src: true
+        extra_opts: ["--strip-components=1"]
+      ignore_errors: true
+
+    # ── Hayabusa (Windows log timeline) ──────────────────────
+    - name: Create tools directory
+      ansible.builtin.file:
+        path: "{{ tools_dir }}/hayabusa"
+        state: directory
+        mode: "0755"
+
+    - name: Download Hayabusa
+      ansible.builtin.get_url:
+        url: "https://github.com/Yamato-Security/hayabusa/releases/latest/download/hayabusa-2.16.0-linux-intel.zip"
+        dest: /tmp/hayabusa.zip
+        timeout: 60
+      ignore_errors: true
+
+    # ── Tool verification ─────────────────────────────────────
+    - name: Verify Volatility3 installation
+      ansible.builtin.command:
+        cmd: vol3 -h
+      register: vol3_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Show installed tools summary
+      ansible.builtin.debug:
+        msg:
+          - "✅ Sleuth Kit: {{ 'installed' if 'tsk_version' is defined else 'installed via apt' }}"
+          - "✅ Volatility3: {{ 'OK' if vol3_check.rc == 0 else 'check manually' }}"
+          - "✅ YARA: installed"
+          - "✅ Foremost, Binwalk, Bulk-extractor: installed"

@@ -1,0 +1,92 @@
+---
+# =============================================================
+#  Playbook: suricata.yml
+#  Installs and configures Suricata IDS on the sensor node
+# =============================================================
+
+- name: Deploy Suricata IDS
+  hosts: sensor
+  become: true
+  vars:
+    suricata_version: "7.0.3"
+    suricata_log_dir: /var/log/suricata
+    suricata_rule_dir: /etc/suricata/rules
+    et_open_url: "https://rules.emergingthreats.net/open/suricata-{{ suricata_version }}/emerging.rules.tar.gz"
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  tasks:
+    # ── Installation ──────────────────────────────────────────
+    - name: Add Suricata PPA
+      ansible.builtin.apt_repository:
+        repo: ppa:oisf/suricata-stable
+        state: present
+
+    - name: Install Suricata
+      ansible.builtin.apt:
+        name:
+          - suricata
+          - suricata-update
+          - jq
+        state: present
+
+    # ── Configuration ─────────────────────────────────────────
+    - name: Create log directory
+      ansible.builtin.file:
+        path: "{{ suricata_log_dir }}"
+        state: directory
+        owner: suricata
+        group: suricata
+        mode: "0755"
+
+    - name: Deploy suricata.yaml
+      ansible.builtin.template:
+        src: ../roles/sensor/templates/suricata.yaml.j2
+        dest: /etc/suricata/suricata.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart Suricata
+
+    # ── Rules ─────────────────────────────────────────────────
+    - name: Update Suricata rules via suricata-update
+      ansible.builtin.command:
+        cmd: suricata-update
+      changed_when: true
+
+    - name: Enable ET Open ruleset
+      ansible.builtin.command:
+        cmd: suricata-update enable-source et/open
+      changed_when: true
+
+    - name: Apply rule updates
+      ansible.builtin.command:
+        cmd: suricata-update
+      changed_when: true
+
+    # ── Service ───────────────────────────────────────────────
+    - name: Enable and start Suricata
+      ansible.builtin.systemd:
+        name: suricata
+        enabled: true
+        state: started
+
+    - name: Verify Suricata is running
+      ansible.builtin.command:
+        cmd: suricatasc -c uptime
+      register: suricata_status
+      changed_when: false
+
+    - name: Show Suricata status
+      ansible.builtin.debug:
+        msg: "{{ suricata_status.stdout }}"
+
+  handlers:
+    - name: Restart Suricata
+      ansible.builtin.systemd:
+        name: suricata
+        state: restarted
