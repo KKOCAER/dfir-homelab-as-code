@@ -58,7 +58,7 @@ sudo apt install vagrant virtualbox ansible
 ### Spin up the lab
 
 ```bash
-git clone https://github.com/youruser/dfir-lab-as-code
+git clone https://github.com/KKOCAER/dfir-lab-as-code
 cd dfir-lab-as-code
 
 # Start all VMs
